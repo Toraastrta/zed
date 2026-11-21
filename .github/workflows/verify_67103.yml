@@ -1,0 +1,45 @@
+name: verify-67103
+
+on:
+  push:
+    branches: [verify-67103]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 3
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: ./script/linux
+
+      - name: Unit test with the fix
+        run: cargo test -p gpui --lib shape_text_does_not_reuse_layouts_across_line_clamps
+
+      - name: Platform text system probe with the fix
+        shell: bash
+        run: |
+          cargo build -p gpui --example line_clamp_platform_probe
+          ./target/debug/examples/line_clamp_platform_probe
+
+      - name: Switch line_layout.rs back to main (2f808b3c2d)
+        shell: bash
+        run: git show 2f808b3c2d:crates/gpui/src/text_system/line_layout.rs > crates/gpui/src/text_system/line_layout.rs
+
+      - name: Platform text system probe on main (expected to fail)
+        shell: bash
+        run: |
+          cargo build -p gpui --example line_clamp_platform_probe
+          if ./target/debug/examples/line_clamp_platform_probe; then
+            echo "main unexpectedly passed"
+            exit 1
+          fi
+          echo "main fails as expected"
